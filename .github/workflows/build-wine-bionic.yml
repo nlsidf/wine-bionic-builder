@@ -116,18 +116,37 @@ jobs:
     - name: Package Wine
       run: |
         cd wine-src
-        # 手动打包编译产物（交叉编译下make install可能没有）
-        mkdir -p /tmp/wine-pkg
-        for d in lib bin share include; do
-          [ -d "$d" ] && cp -r "$d" /tmp/wine-pkg/ 2>/dev/null || true
-        done
-        # 也检查子目录
-        for d in */; do
-          base=$(basename "$d")
-          if [ ! -d "/tmp/wine-pkg/$base" ]; then
-            cp -r "$d" /tmp/wine-pkg/ 2>/dev/null || true
+        
+        # 找出所有编译好的二进制和库
+        mkdir -p /tmp/wine-pkg/bin /tmp/wine-pkg/lib
+        
+        # 复制loader生成的主wine二进制
+        for f in loader/wine loader/wine.so loader/wine64 loader/wine64.so; do
+          if [ -f "$f" ]; then
+            install -D "$f" "/tmp/wine-pkg/bin/$(basename $f)"
+            # 如果是.so，放到lib目录
+            if [[ "$f" == *.so ]]; then
+              cp "$f" /tmp/wine-pkg/lib/ 2>/dev/null
+            fi
           fi
-        done 2>/dev/null
+        done
+        
+        # 复制编译好的.so文件（unix端DLL）
+        find dlls -name "*.so" -type f 2>/dev/null | while read so; do
+          dest="lib/$(echo $so | cut -d/ -f2-)"
+          mkdir -p "/tmp/wine-pkg/$(dirname $dest)"
+          cp "$so" "/tmp/wine-pkg/$dest" 2>/dev/null || true
+        done
+        
+        # 复制wine提供的其他工具
+        for tool in wineserver wineboot winecfg wineconsole winedbg winefile winemine; do
+          if [ -f "programs/$tool/$tool" ]; then
+            cp "programs/$tool/$tool" /tmp/wine-pkg/bin/ 2>/dev/null
+          fi
+        done
+        
+        # 复制wine.pdb等杂项文件
+        cp -r fonts nls /tmp/wine-pkg/ 2>/dev/null || true
         
         cd /tmp
         tar -czf "wine-bionic-${{ env.WINE_VERSION }}-x86_64.tar.gz" wine-pkg
