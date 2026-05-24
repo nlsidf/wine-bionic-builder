@@ -34,7 +34,7 @@ jobs:
       run: |
         WINE_VER="${{ github.event.inputs.wine_version }}"
         # 尝试多个源
-        wget -q "https://dl.winehq.org/wine/source/${WINE_VER%.*}/wine-${WINE_VER}.tar.xz" \
+        wget -q "https://dl.winehq.org/wine/source/${WINE_VER}/wine-${WINE_VER}.tar.xz" \
           -O "wine-${WINE_VER}.tar.xz" 2>/dev/null || \
         wget -q "https://github.com/wine-mirror/wine/archive/refs/tags/wine-${WINE_VER}.tar.gz" \
           -O "wine-${WINE_VER}.tar.gz" 2>/dev/null || \
