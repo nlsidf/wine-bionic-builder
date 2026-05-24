@@ -60,26 +60,34 @@ jobs:
         cd wine-src
         mkdir -p ../wine-tools-build ../wine-tools-install
         cd ../wine-tools-build
-        ../wine-src/configure --prefix=$PWD/../wine-tools-install 2>&1 | tail -5
+        ../wine-src/configure --prefix=$PWD/../wine-tools-install \
+          --without-x --without-freetype 2>&1 | tail -10
         make -j$(nproc) 2>&1 | tail -5
         make install 2>&1 | tail -5
         echo "$PWD/../wine-tools-install/bin" >> $GITHUB_PATH
 
     - name: Configure Wine (cross-compile)
       run: |
-        export PATH="$NDK_HOME/toolchains/llvm/prebuilt/linux-x86_64/bin:$PATH"
-        export CC=x86_64-linux-android24-clang
-        export CXX=x86_64-linux-android24-clang++
-        export AR=llvm-ar
-        export RANLIB=llvm-ranlib
-        export LD=ld.lld
+        export NDK=$NDK_HOME
+        export TOOLCHAIN=$NDK/toolchains/llvm/prebuilt/linux-x86_64
         
-        # Bionic compatibility flags
-        export CFLAGS="-O2 -fPIC -D__BIONIC__ -D__ANDROID_API__=24 -march=x86-64"
-        export LDFLAGS="-lm -landroid-spawn"
+        # 设置交叉编译工具链
+        export PATH="$TOOLCHAIN/bin:$PATH"
+        export CC=$TOOLCHAIN/bin/x86_64-linux-android24-clang
+        export CXX=$TOOLCHAIN/bin/x86_64-linux-android24-clang++
+        export AR=$TOOLCHAIN/bin/llvm-ar
+        export RANLIB=$TOOLCHAIN/bin/llvm-ranlib
+        export LD=$TOOLCHAIN/bin/ld.lld
+        export CC_FOR_BUILD=gcc
+        
+        # NDK sysroot和bionic标志
+        export SYSROOT=$NDK/toolchains/llvm/prebuilt/linux-x86_64/sysroot
+        export CFLAGS="-O2 -fPIC -target x86_64-linux-android24 --sysroot=$SYSROOT -D__BIONIC__ -D__ANDROID_API__=24"
+        export CXXFLAGS="$CFLAGS"
+        export LDFLAGS="-target x86_64-linux-android24 --sysroot=$SYSROOT -lm -landroid-spawn"
         export CPPFLAGS="-D__BIONIC__ -D__ANDROID_API__=24"
         
-        # Tell configure these glibc functions don't exist
+        # Bionic不存在的glibc函数
         export ac_cv_func_getpwent=no
         export ac_cv_func_getpwnam=no
         export ac_cv_func_getpwuid=no
@@ -92,6 +100,7 @@ jobs:
         
         cd wine-src
         ./configure \
+          --build=x86_64-pc-linux-gnu \
           --host=x86_64-linux-android \
           --enable-archs=i386,x86_64 \
           --prefix=/tmp/wine-install \
@@ -106,12 +115,15 @@ jobs:
 
     - name: Build Wine
       run: |
-        export PATH="$NDK_HOME/toolchains/llvm/prebuilt/linux-x86_64/bin:$PATH"
-        export CC=x86_64-linux-android24-clang
-        export CXX=x86_64-linux-android24-clang++
+        export NDK=$NDK_HOME
+        export TOOLCHAIN=$NDK/toolchains/llvm/prebuilt/linux-x86_64
+        export PATH="$TOOLCHAIN/bin:$PATH"
+        export CC=$TOOLCHAIN/bin/x86_64-linux-android24-clang
+        export CXX=$TOOLCHAIN/bin/x86_64-linux-android24-clang++
+        export AR=$TOOLCHAIN/bin/llvm-ar
         
         cd wine-src
-        make -j$(nproc) 2>&1 | tail -20
+        make -j$(nproc) 2>&1 | tail -30
 
     - name: Package Wine
       run: |
