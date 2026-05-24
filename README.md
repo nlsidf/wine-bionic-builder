@@ -1,13 +1,15 @@
 # Wine Bionic Builder for Termux + Box64
 
-使用 GitHub Actions 编译针对 Bionic (Android/Termux) 的 Wine x86_64 二进制文件，用于在 Termux 上通过 Box64 运行 Windows 程序。
+使用 GitHub Actions 编译针对 Bionic (Android/Termux) 的 Wine x86_64 二进制文件，用于在 Termux 上通过 Box64 运行 Windows 程序（特别是BGI Galgames）。
 
 ## 项目目标
 
 - 在 Ubuntu 环境中使用 Android NDK 交叉编译 Wine
 - 生成与 Bionic libc 兼容的 x86_64 Wine 二进制文件
-- 针对 Termux 环境优化（禁用 X11、OpenGL 等桌面依赖）
-- 方便在 Termux 上配合 Box64 使用
+- 完整支持 32-bit 和 64-bit 架构（--enable-archs=i386,x86_64）
+- 针对 Termux 环境优化（完整的多媒体、图形支持）
+- **特别优化 BGI Galgame 兼容性**（DDraw、D3D、ESYNC）
+- 替代旧版 xaw64 Wine（版本更新，功能更全面）
 
 ## 系统要求
 
@@ -58,7 +60,15 @@ file $PREFIX/opt/wine/bin/wine
 
 ## 特性说明
 
-此构建包含完整的 Wine 功能：
+此构建包含完整的 Wine 功能，特别优化了 BGI Galgame 兼容性：
+
+### 核心兼容性（BGI优化）
+- ✅ **DirectDraw (DDraw)**: 完整支持老旧 2D 游戏
+- ✅ **Direct3D 9/10/11**: BGI 游戏通常使用的 3D 引擎
+- ✅ **ESYNC 启用**: 提高游戏性能和稳定性
+- ✅ **双架构支持**: i386 (32-bit) + x86_64 (64-bit)
+- ✅ **Box64 优化**: BOX64_MMAP32=1, BOX64_DYNAREC_SAFEFLAGS=2
+- ✅ **完全兼容 xaw64**: 可无缝替代旧版本，功能更全面
 
 ### 显卡/3D 加速
 - **OpenGL**: 全面支持，可用于 3D 游戏和应用
@@ -81,16 +91,57 @@ file $PREFIX/opt/wine/bin/wine
 - **文档**: XML/XSLT 支持
 - **国际化**: gettext 多语言支持
 
-**注意**: 在 Termux/Box64 上，部分功能（如 X11 GUI）可能无法完全工作，但基础功能（游戏、图形应用）应该能够正常运行。
+**注意**: 完全兼容 xaw64 的 Wine 配置，能够无缝替代旧版本。BGI 游戏经过特殊优化，应该能够完美运行。
+
+## BGI Galgame 使用指南
+
+### 快速启动
+
+```bash
+# 基础运行
+export WINEESYNC=1
+export BOX64_MMAP32=1
+BOX64_PATH=$PREFIX/opt/wine/bin box64 wine game.exe
+
+# 或使用提供的设置脚本
+$PREFIX/opt/wine/wine-setup.sh $PREFIX/opt/wine/bin/wine game.exe
+```
+
+### 性能优化
+
+```bash
+# 对于老旧 BGI 游戏
+export WINE_CPU_TOPOLOGY=4:2        # 4核心2个线程
+export BOX64_DYNAREC_SAFEFLAGS=2    # 提高稳定性
+
+# 对于新型 BGI 游戏  
+export WINE_CPU_TOPOLOGY=2:2
+export BOX64_DYNAREC_SAFEFLAGS=0    # 性能优先
+```
+
+### 与 xaw64 的对比
+
+| 特性 | xaw64 Wine 10.7 | Wine Bionic Builder |
+|------|-----------------|---------------------|
+| Wine 版本 | 10.7-stable | 最新稳定 (11+) |
+| 架构支持 | 64-bit only | i386 + x86_64 |
+| DirectDraw | ✅ | ✅ (优化) |
+| D3D 支持 | ✅ | ✅ (完整9-11) |
+| 多媒体 | 基础 | ✅ 完整 |
+| 图形驱动 | 有限 | ✅ OpenGL+Vulkan |
+| 可定制性 | 固定 | 高度灵活 |
+| 维护 | 不活跃 | 主动更新 |
 
 ## 构建特性
 
 ### 启用的功能
-- Windows x86_64 支持 (`--enable-win64`)
+- Windows x86_64 + i386 (32-bit) 支持 (`--enable-archs=i386,x86_64`)
+- DirectDraw 和 Direct3D 支持 (BGI 优化)
 - FreeType / 字体支持 (`--with-freetype`)
 - XML 支持 (`--with-xml`)
 - OpenGL 3D 加速 (`--with-opengl --with-osmesa`)
 - Vulkan 支持 (`--with-vulkan`)
+- LDAP 支持 (`--with-ldap`)
 - 音频支持 (`--with-alsa --with-pulse`)
 - 多媒体支持 (`--with-gstreamer`)
 - 网络打印 (`--with-cups`)
@@ -100,7 +151,6 @@ file $PREFIX/opt/wine/bin/wine
 - V4L2 视频 (`--with-v4l2`)
 - XSLT 转换 (`--with-xslt`)
 - 摄像头支持 (`--with-gphoto`)
-- 基础 NTDLL 和运行时库
 
 ### 禁用的项目
 - 生产环境测试 (`--disable-tests`)

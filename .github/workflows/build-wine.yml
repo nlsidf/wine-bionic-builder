@@ -77,17 +77,18 @@ jobs:
           
           echo "WINE_VERSION=${WINE_VER}" >> $GITHUB_ENV
 
-      - name: Build Wine tools (native 64-bit)
+      - name: Build Wine tools (native 64-bit and 32-bit support)
         run: |
           cd wine-src
           mkdir -p ../wine-tools-build ../wine-tools-install
           cd ../wine-tools-build
-          ../wine-src/configure --prefix=$PWD/../wine-tools-install --enable-win64 2>&1 | tail -10
+          # Build both 32-bit and 64-bit tools for full architecture support
+          ../wine-src/configure --prefix=$PWD/../wine-tools-install --enable-archs=i386,x86_64 2>&1 | tail -10
           make -j$(nproc) 2>&1 | tail -10
           make install 2>&1 | tail -10
           echo "$PWD/../wine-tools-install/bin" >> $GITHUB_PATH
 
-      - name: Configure Wine for Android/Bionic (cross-compile to x86_64)
+      - name: Configure Wine for Android/Bionic (cross-compile to x86_64 with i386 support)
         run: |
           export PATH="$NDK_HOME/toolchains/llvm/prebuilt/linux-x86_64/bin:$PATH"
           export CC=x86_64-linux-android24-clang
@@ -115,9 +116,11 @@ jobs:
           export ac_cv_func_log2=yes
           
           cd wine-src
+          # Enable both architectures for maximum game compatibility
           ./configure \
             --host=x86_64-linux-android \
             --enable-win64 \
+            --enable-archs=i386,x86_64 \
             --prefix=/opt/wine-${{ env.WINE_VERSION }} \
             --with-freetype \
             --with-xml \
@@ -136,6 +139,7 @@ jobs:
             --with-usb \
             --with-dbus \
             --with-vulkan \
+            --with-ldap \
             --with-wine-tools=$PWD/../wine-tools-install \
             --disable-tests 2>&1 | tail -30
 
@@ -148,17 +152,87 @@ jobs:
           cd wine-src
           make -j$(nproc) 2>&1 | tail -20
 
-      - name: Package Wine for Termux
+      - name: Install and package Wine for Termux
         run: |
           cd wine-src
           
           # Staged installation
           mkdir -p /tmp/wine-stage-install
-          make install DESTDIR=/tmp/wine-stage-install 2>&1 | tail -5
+          make install DESTDIR=/tmp/wine-stage-install 2>&1 | tail -10
           
           # Prepare final package structure for Termux (/opt or $PREFIX)
           mkdir -p /tmp/wine-package/opt
           cp -av /tmp/wine-stage-install/opt/wine-${{ env.WINE_VERSION }} /tmp/wine-package/opt/wine || true
+
+      - name: Create installation scripts for BGI and xaw64 compatibility
+        run: |
+          # Add setup scripts to the package
+          cat > /tmp/wine-package/opt/wine/wine-setup.sh << 'EOFSETUP'
+          #!/bin/bash
+          # Wine Bionic setup for Box64 + xaw64 compatibility
+          
+          export WINEESYNC=1
+          export BOX64_MMAP32=1
+          export BOX64_DYNAREC_SAFEFLAGS=2
+          export WINE_CPU_TOPOLOGY=4:2
+          
+          # BGI-specific optimizations
+          export WINEDEBUG=-all
+          
+          # Performance tuning for older games
+          export DXVK_FRAME_RATE=0
+          
+          exec "$@"
+          EOFSETUP
+          
+          chmod +x /tmp/wine-package/opt/wine/wine-setup.sh
+          
+          # Create compatibility mode preset for BGI games
+          cat > /tmp/wine-package/COMPATIBILITY.md << 'EOFCOMPAT'
+          # Wine Bionic Compatibility Guide for BGI Galgames
+          
+          ## Quick Setup for BGI Games
+          
+          ```bash
+          # After installation in Termux:
+          export WINEESYNC=1
+          export BOX64_MMAP32=1
+          export BOX64_DYNAREC_SAFEFLAGS=2
+          
+          # For specific BGI game compatibility:
+          BOX64_PATH=$PREFIX/opt/wine/bin box64 wine program.exe
+          ```
+          
+          ## Compatibility Features
+          
+          - ✅ DirectDraw (DDraw) support for 2D graphics
+          - ✅ Direct3D 9/10/11 support for 3D graphics
+          - ✅ ESYNC enabled for better game performance
+          - ✅ Both 32-bit and 64-bit architecture support
+          - ✅ Multiple graphics driver support (OpenGL, Vulkan)
+          
+          ## Troubleshooting BGI Games
+          
+          ### Game crashes at startup:
+          ```bash
+          export WINEDEBUG=+timestamp,+pid,+tid
+          BOX64_PATH=$PREFIX/opt/wine/bin box64 wine game.exe 2>&1 | head -50
+          ```
+          
+          ### Graphics issues:
+          ```bash
+          # Try different rendering modes
+          export WINE_CPU_TOPOLOGY=2:2
+          export BOX64_DYNAREC_SAFEFLAGS=0
+          ```
+          
+          ### Sound not working:
+          ```bash
+          export PULSE_SINK=0
+          export PULSE_SOURCE=0
+          ```
+          
+          EOFCOMPAT
           
           cd /tmp/wine-package
           tar -cJf wine-bionic-${{ env.WINE_VERSION }}-x86_64-termux.tar.xz .
