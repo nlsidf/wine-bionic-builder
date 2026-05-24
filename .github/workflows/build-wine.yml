@@ -56,17 +56,29 @@ jobs:
         run: |
           WINE_VER="${{ github.event.inputs.wine_version }}"
           
-          # Try multiple sources for Wine source
+          # Auto-detect latest Wine stable version if not specified
           if [ -z "$WINE_VER" ]; then
             echo "Detecting latest Wine version..."
-            WINE_VER=$(curl -s https://dl.winehq.org/wine/source/ | grep -o 'wine-[0-9]\+\(\.[0-9]\+\)*' | sort -V | tail -n1 | sed 's/wine-//')
+            # Try WineHQ source listing
+            WINE_VER=$(curl -sL https://dl.winehq.org/wine/source/ 2>/dev/null | grep -oP 'href="wine-\K[0-9]+\.[0-9]+(?=/")' | sort -V | tail -n1 || true)
+            # Fallback: try GitHub releases API
+            if [ -z "$WINE_VER" ]; then
+              WINE_VER=$(curl -sL https://api.github.com/repos/wine-mirror/wine/releases/latest 2>/dev/null | grep -oP '"tag_name":\s*"wine-\K[^"]+' || true)
+            fi
+            # Hardcoded fallback
+            if [ -z "$WINE_VER" ]; then
+              WINE_VER="11.0"
+            fi
+            echo "Detected Wine version: ${WINE_VER}"
           fi
           
           echo "Building Wine ${WINE_VER}"
           
-          wget -q "https://dl.winehq.org/wine/source/${WINE_VER}/wine-${WINE_VER}.tar.xz" \
+          wget -q "https://dl.winehq.org/wine/source/${WINE_VER%.*}/wine-${WINE_VER}.tar.xz" \
             -O "wine-${WINE_VER}.tar.xz" 2>/dev/null || \
           wget -q "https://github.com/wine-mirror/wine/archive/refs/tags/wine-${WINE_VER}.tar.gz" \
+            -O "wine-${WINE_VER}.tar.gz" 2>/dev/null || \
+          wget -q "https://gitlab.winehq.org/wine/wine/-/archive/wine-${WINE_VER}/wine-wine-${WINE_VER}.tar.gz" \
             -O "wine-${WINE_VER}.tar.gz" 2>/dev/null || \
           (echo "Failed to download Wine ${WINE_VER}" && exit 1)
           
