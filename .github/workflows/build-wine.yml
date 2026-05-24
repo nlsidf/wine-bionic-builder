@@ -43,7 +43,8 @@ jobs:
             libalsa-ocaml-dev libgstreamer1.0-dev libgstreamer-plugins-base1.0-dev \
             libcups2-dev libsane-dev libusb-1.0-0-dev libdbus-1-dev \
             libfontconfig1-dev libpcap-dev libvulkan-dev \
-            vulkan-tools glslc llvm-dev libclang-dev meson ninja-build
+            vulkan-tools glslc llvm-dev libclang-dev meson ninja-build \
+            clang-16 lld-16
 
       - name: Download Android NDK
         run: |
@@ -97,8 +98,9 @@ jobs:
       - name: Build Wine tools (native 64-bit and 32-bit support)
         run: |
           set -o pipefail
-          export CC=gcc
-          export CXX=g++
+          # Use clang-16 (clang-18 crashes on 16-bit Windows PE targets)
+          export CC=clang-16
+          export CXX=clang++-16
           cd wine-src
           mkdir -p ../wine-tools-build ../wine-tools-install
           cd ../wine-tools-build
