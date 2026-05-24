@@ -18,7 +18,7 @@ on:
 
 jobs:
   build-wine:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-22.04
     permissions: 
       contents: read
     steps:
@@ -94,7 +94,16 @@ jobs:
           
           echo "WINE_VERSION=${WINE_VER}" >> $GITHUB_ENV
 
-
+      - name: Build Wine tools (native)
+        run: |
+          cd wine-src
+          mkdir -p ../wine-tools-build ../wine-tools-install
+          cd ../wine-tools-build
+          ../wine-src/configure --prefix=$PWD/../wine-tools-install \
+            --without-x --without-freetype --disable-tests
+          make -j$(nproc)
+          make install
+          echo "$PWD/../wine-tools-install/bin" >> $GITHUB_PATH
 
       - name: Configure Wine for Android/Bionic (cross-compile to x86_64 with i386 support)
         run: |
@@ -149,6 +158,7 @@ jobs:
             --with-dbus \
             --with-vulkan \
             --with-ldap \
+            --with-wine-tools=$PWD/../wine-tools-install \
             --disable-tests 2>&1 | tail -30
 
       - name: Build Wine
