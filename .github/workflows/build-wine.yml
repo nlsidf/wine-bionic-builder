@@ -74,19 +74,19 @@ jobs:
           
           echo "Building Wine ${WINE_VER}"
           
-          wget -q "https://dl.winehq.org/wine/source/${WINE_VER%.*}/wine-${WINE_VER}.tar.xz" \
-            -O "wine-${WINE_VER}.tar.xz" 2>/dev/null || \
+          # Try mirrors: GitHub → GitLab → WineHQ
           wget -q "https://github.com/wine-mirror/wine/archive/refs/tags/wine-${WINE_VER}.tar.gz" \
-            -O "wine-${WINE_VER}.tar.gz" 2>/dev/null || \
-          wget -q "https://gitlab.winehq.org/wine/wine/-/archive/wine-${WINE_VER}/wine-wine-${WINE_VER}.tar.gz" \
-            -O "wine-${WINE_VER}.tar.gz" 2>/dev/null || \
+            -O "wine-${WINE_VER}.tar.gz" 2>/dev/null && \
+          tar -xf "wine-${WINE_VER}.tar.gz" 2>/dev/null || \
+          (rm -f "wine-${WINE_VER}.tar.gz" && \
+           wget -q "https://gitlab.winehq.org/wine/wine/-/archive/wine-${WINE_VER}/wine-wine-${WINE_VER}.tar.gz" \
+            -O "wine-${WINE_VER}.tar.gz" 2>/dev/null && \
+           tar -xf "wine-${WINE_VER}.tar.gz" 2>/dev/null) || \
+          (rm -f "wine-${WINE_VER}.tar.gz" && \
+           wget -q "https://dl.winehq.org/wine/source/${WINE_VER}/wine-${WINE_VER}.tar.xz" \
+            -O "wine-${WINE_VER}.tar.xz" 2>/dev/null && \
+           tar -xf "wine-${WINE_VER}.tar.xz" 2>/dev/null) || \
           (echo "Failed to download Wine ${WINE_VER}" && exit 1)
-          
-          if [ -f "wine-${WINE_VER}.tar.xz" ]; then
-            tar -xf "wine-${WINE_VER}.tar.xz"
-          elif [ -f "wine-${WINE_VER}.tar.gz" ]; then
-            tar -xf "wine-${WINE_VER}.tar.gz"
-          fi
           
           # Find extracted directory with flexible naming
           WINE_DIR=$(ls -d wine-*/ 2>/dev/null | head -1 || ls -d wine-wine-*/ 2>/dev/null | head -1)
