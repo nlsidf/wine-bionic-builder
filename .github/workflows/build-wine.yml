@@ -112,7 +112,7 @@ jobs:
           mkdir -p ${{ github.workspace }}/wine-tools-build ${{ github.workspace }}/wine-tools-install
           cd ${{ github.workspace }}/wine-tools-build
           ${{ github.workspace }}/wine-src/configure --prefix=${{ github.workspace }}/wine-tools-install \
-            --enable-archs=i386,x86_64 --with-wine-tools=build
+            --enable-archs=i386,x86_64
           make -j$(nproc)
           make install
           echo "${{ github.workspace }}/wine-tools-install/bin" >> $GITHUB_PATH
