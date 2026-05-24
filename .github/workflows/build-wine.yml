@@ -98,14 +98,11 @@ jobs:
       - name: Build Wine tools (native 64-bit and 32-bit support)
         run: |
           set -o pipefail
-          # Use clang-16 (clang-18 crashes on 16-bit Windows PE targets)
-          export CC=clang-16
-          export CXX=clang++-16
           cd wine-src
           mkdir -p ../wine-tools-build ../wine-tools-install
           cd ../wine-tools-build
-          # Build both 32-bit and 64-bit tools for full architecture support
-          ../wine-src/configure --prefix=$PWD/../wine-tools-install --enable-archs=i386,x86_64 --disable-tests 2>&1 | tail -20
+          # Build native tools only (host binaries - no PE cross-compilation)
+          ../wine-src/configure --prefix=$PWD/../wine-tools-install --disable-tests --disable-winelib 2>&1 | tail -20
           make -j$(nproc) 2>&1 | tail -20
           make install 2>&1 | tail -20
           echo "$PWD/../wine-tools-install/bin" >> $GITHUB_PATH
