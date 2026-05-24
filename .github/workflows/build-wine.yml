@@ -1,6 +1,10 @@
 name: Build Wine for Bionic (x86_64) - Termux compatible
 
 on:
+  push:
+    branches: [ master, main ]
+  pull_request:
+    branches: [ master, main ]
   workflow_dispatch:
     inputs:
       wine_version:
@@ -20,7 +24,7 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-       - name: Install comprehensive dependencies
+      - name: Install comprehensive dependencies
         run: |
           sudo apt-get update
           sudo apt-get install -y \
@@ -196,6 +200,8 @@ jobs:
           else
             echo "DXVK download skipped, continuing with Wine-only build"
           fi
+
+      - name: Package Wine for Termux
         run: |
           # Add setup scripts to the package
           cat > /tmp/wine-package/opt/wine/wine-setup.sh << 'EOFSETUP'
@@ -355,9 +361,12 @@ jobs:
           3. Use with Box64:
              BOX64_PATH=$PREFIX/opt/wine/bin box64 wine program.exe
           
-          Build Flags:
-          - Disabled: X11, FreeType, XML, Cups, Gphoto, Alsa, Pulse, OpenGL
-          - Target: Android/Bionic libc (x86_64)
+          Build Features:
+          - Enabled: Freetype, XML, XSLT, Cups, Gphoto, SANE, V4L2,
+            GStreamer, ALSA, PulseAudio, ncurses, gettext, OSMesa,
+            OpenGL, USB, D-Bus, Vulkan, LDAP
+          - DXVK: Included (Vulkan-based DirectX 9/10/11)
+          - Target: Android/Bionic libc (x86_64, with i386 support)
           - Compiler: Clang from Android NDK
           EOF
           cat ${{ github.workspace }}/BUILD_INFO.txt
