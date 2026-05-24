@@ -43,11 +43,15 @@ jobs:
             libalsa-ocaml-dev libgstreamer1.0-dev libgstreamer-plugins-base1.0-dev \
             libcups2-dev libsane-dev libusb-1.0-0-dev libdbus-1-dev \
             libfontconfig1-dev libpcap-dev libvulkan-dev \
-            vulkan-tools glslc llvm-dev libclang-dev meson ninja-build \
-            clang-16 lld-16
+            vulkan-tools glslc meson ninja-build \
+            clang-16 lld-16 llvm-16-dev libclang-16-dev
 
       - name: Switch to clang-16 (avoid clang-18 PE target crash)
         run: |
+          # Remove buggy clang-18 and install clang-16 as default
+          sudo apt-get remove -y clang-18 llvm-18-dev libclang-18-dev 2>/dev/null || true
+          sudo apt-get autoremove -y 2>/dev/null || true
+          # Make clang-16 the system default
           sudo update-alternatives --install /usr/bin/clang clang /usr/bin/clang-16 100
           sudo update-alternatives --install /usr/bin/clang++ clang++ /usr/bin/clang++-16 100
           sudo update-alternatives --install /usr/bin/ld.lld ld.lld /usr/bin/lld-16 100
