@@ -96,17 +96,19 @@ jobs:
 
       - name: Build Wine tools (native 64-bit and 32-bit support)
         run: |
+          set -o pipefail
           cd wine-src
           mkdir -p ../wine-tools-build ../wine-tools-install
           cd ../wine-tools-build
           # Build both 32-bit and 64-bit tools for full architecture support
-          ../wine-src/configure --prefix=$PWD/../wine-tools-install --enable-archs=i386,x86_64 2>&1 | tail -10
-          make -j$(nproc) 2>&1 | tail -10
-          make install 2>&1 | tail -10
+          ../wine-src/configure --prefix=$PWD/../wine-tools-install --enable-archs=i386,x86_64 2>&1 | tail -20
+          make -j$(nproc) 2>&1 | tail -20
+          make install 2>&1 | tail -20
           echo "$PWD/../wine-tools-install/bin" >> $GITHUB_PATH
 
       - name: Configure Wine for Android/Bionic (cross-compile to x86_64 with i386 support)
         run: |
+          set -o pipefail
           export PATH="$NDK_HOME/toolchains/llvm/prebuilt/linux-x86_64/bin:$PATH"
           export CC=x86_64-linux-android24-clang
           export CXX=x86_64-linux-android24-clang++
@@ -162,6 +164,7 @@ jobs:
 
       - name: Build Wine
         run: |
+          set -o pipefail
           export PATH="$NDK_HOME/toolchains/llvm/prebuilt/linux-x86_64/bin:$PATH"
           export CC=x86_64-linux-android24-clang
           export CXX=x86_64-linux-android24-clang++
@@ -171,18 +174,35 @@ jobs:
 
       - name: Install and package Wine for Termux
         run: |
+          set -o pipefail
           cd wine-src
           
-          # Staged installation
-          mkdir -p /tmp/wine-stage-install
-          make install DESTDIR=/tmp/wine-stage-install 2>&1 | tail -10
-          
-          # Prepare final package structure for Termux (/opt or $PREFIX)
-          mkdir -p /tmp/wine-package/opt
-          cp -av /tmp/wine-stage-install/opt/wine-${{ env.WINE_VERSION }} /tmp/wine-package/opt/wine || true
+          # Staged installation (make install may not exist for cross-compile)
+          mkdir -p /tmp/wine-package/opt/wine/bin /tmp/wine-package/opt/wine/lib/wine /tmp/wine-package/opt/wine/share
+          if make install DESTDIR=/tmp/wine-stage-install 2>&1 | tail -10; then
+            cp -a /tmp/wine-stage-install/opt/wine-${{ env.WINE_VERSION }}/* /tmp/wine-package/opt/wine/
+          else
+            # Manual install: copy built files directly
+            echo "make install not available, copying files manually..."
+            for dir in dlls programs loader; do
+              find "$dir" -name "*.so" -o -name "*.dll" -o -type f -executable 2>/dev/null | while read f; do
+                target_dir="/tmp/wine-package/opt/wine/lib/wine/$(dirname "$f" | sed 's/^[^/]*\///')"
+                mkdir -p "$target_dir"
+                cp -a "$f" "$target_dir/" 2>/dev/null || true
+              done
+            done
+            # Copy Wine executables
+            cp -a loader/wine loader/wine64 loader/wine.so loader/wine64.so /tmp/wine-package/opt/wine/bin/ 2>/dev/null || true
+            for tool in wineserver wineboot winecfg wineconsole winedbg winefile; do
+              find programs -name "$tool" -type f -exec cp -a {} /tmp/wine-package/opt/wine/bin/ \; 2>/dev/null || true
+            done
+            # Copy misc files
+            cp -a fonts nls /tmp/wine-package/opt/wine/share/ 2>/dev/null || true
+          fi
 
       - name: Build and integrate DXVK (Vulkan DirectX support)
         run: |
+          set -o pipefail
           cd /tmp
           
           # Clone DXVK for Vulkan DirectX translation
@@ -192,22 +212,28 @@ jobs:
           if [ -d dxvk-src ]; then
             cd dxvk-src
             
-            # Setup Meson build for DXVK
-            ./setup-meson.sh /tmp/dxvk-build x86_64 2>&1 | tail -10 || true
+            # Build DXVK with Meson directly
+            meson setup /tmp/dxvk-build \
+              --buildtype release \
+              -Ddxvk_compiler=clang \
+              -Denable_tests=false 2>&1 | tail -10 || true
             
             if [ -d /tmp/dxvk-build ]; then
               cd /tmp/dxvk-build
               ninja 2>&1 | tail -10 || true
-              ninja install 2>&1 | tail -10 || true
               
               # Copy DXVK DLLs to Wine
-              if [ -d /tmp/dxvk-build/src ]; then
-                mkdir -p /tmp/wine-package/opt/wine/lib/wine/x86_64-windows
-                mkdir -p /tmp/wine-package/opt/wine/lib/wine/i386-windows
-                
-                find /tmp/dxvk-build -name "*.dll" -type f -exec cp {} /tmp/wine-package/opt/wine/lib/wine/x86_64-windows/ \; 2>/dev/null || true
-                find /tmp/dxvk-build -name "*.dll" -type f -exec cp {} /tmp/wine-package/opt/wine/lib/wine/i386-windows/ \; 2>/dev/null || true
-              fi
+              mkdir -p /tmp/wine-package/opt/wine/lib/wine/x86_64-windows
+              mkdir -p /tmp/wine-package/opt/wine/lib/wine/i386-windows
+              
+              # Find and copy built DLLs
+              find /tmp/dxvk-build -name "*.dll" -type f 2>/dev/null | while read dll; do
+                case "$dll" in
+                  *x86_64*|*x64*) cp "$dll" /tmp/wine-package/opt/wine/lib/wine/x86_64-windows/ 2>/dev/null || true ;;
+                  *x86*|*i386*)   cp "$dll" /tmp/wine-package/opt/wine/lib/wine/i386-windows/ 2>/dev/null || true ;;
+                  *)              cp "$dll" /tmp/wine-package/opt/wine/lib/wine/x86_64-windows/ 2>/dev/null || true ;;
+                esac
+              done
             fi
           else
             echo "DXVK download skipped, continuing with Wine-only build"
@@ -215,6 +241,9 @@ jobs:
 
       - name: Package Wine for Termux
         run: |
+          set -o pipefail
+          # Ensure package directory exists
+          mkdir -p /tmp/wine-package/opt/wine
           # Add setup scripts to the package
           cat > /tmp/wine-package/opt/wine/wine-setup.sh << 'EOFSETUP'
           #!/bin/bash
