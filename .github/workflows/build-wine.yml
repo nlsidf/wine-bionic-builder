@@ -94,22 +94,7 @@ jobs:
           
           echo "WINE_VERSION=${WINE_VER}" >> $GITHUB_ENV
 
-      - name: Build Wine tools (native 64-bit and 32-bit support)
-        run: |
-          set -o pipefail
-          cd wine-src
-          mkdir -p ../wine-tools-build ../wine-tools-install
-          cd ../wine-tools-build
-          # Build native tools only (host binaries - no X/PE/etc.)
-          ../wine-src/configure --prefix=$PWD/../wine-tools-install \
-            --disable-tests --disable-winelib \
-            --without-x --without-freetype --without-opengl --without-vulkan \
-            --without-cups --without-gstreamer --without-pulse --without-alsa \
-            --without-dbus --without-sane --without-v4l2 --without-ldap \
-            --without-gphoto --without-usb --without-pcsclite 2>&1 | tail -20
-          make -j$(nproc) 2>&1 | tail -20
-          make install 2>&1 | tail -20
-          echo "$PWD/../wine-tools-install/bin" >> $GITHUB_PATH
+
 
       - name: Configure Wine for Android/Bionic (cross-compile to x86_64 with i386 support)
         run: |
@@ -164,7 +149,6 @@ jobs:
             --with-dbus \
             --with-vulkan \
             --with-ldap \
-            --with-wine-tools=$PWD/../wine-tools-install \
             --disable-tests 2>&1 | tail -30
 
       - name: Build Wine
