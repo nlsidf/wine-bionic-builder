@@ -61,41 +61,31 @@ jobs:
         mkdir -p ../wine-tools-build ../wine-tools-install
         cd ../wine-tools-build
         ../wine-src/configure --prefix=$PWD/../wine-tools-install \
-          --without-x --without-freetype 2>&1 | tail -10
-        make -j$(nproc) 2>&1 | tail -5
-        make install 2>&1 | tail -5
+          --without-x --without-freetype
+        make -j$(nproc)
+        make install
         echo "$PWD/../wine-tools-install/bin" >> $GITHUB_PATH
 
     - name: Configure Wine (cross-compile)
       run: |
+        set -ex
         export NDK=$NDK_HOME
         export TOOLCHAIN=$NDK/toolchains/llvm/prebuilt/linux-x86_64
-        
-        # 设置交叉编译工具链
         export PATH="$TOOLCHAIN/bin:$PATH"
         export CC=$TOOLCHAIN/bin/x86_64-linux-android24-clang
         export CXX=$TOOLCHAIN/bin/x86_64-linux-android24-clang++
         export AR=$TOOLCHAIN/bin/llvm-ar
         export RANLIB=$TOOLCHAIN/bin/llvm-ranlib
-        export LD=$TOOLCHAIN/bin/ld.lld
         export CC_FOR_BUILD=gcc
         
-        # NDK sysroot和bionic标志
         export SYSROOT=$NDK/toolchains/llvm/prebuilt/linux-x86_64/sysroot
         export CFLAGS="-O2 -fPIC -target x86_64-linux-android24 --sysroot=$SYSROOT -D__BIONIC__ -D__ANDROID_API__=24"
-        export CXXFLAGS="$CFLAGS"
         export LDFLAGS="-target x86_64-linux-android24 --sysroot=$SYSROOT -lm -landroid-spawn"
-        export CPPFLAGS="-D__BIONIC__ -D__ANDROID_API__=24"
         
-        # Bionic不存在的glibc函数
-        export ac_cv_func_getpwent=no
-        export ac_cv_func_getpwnam=no
-        export ac_cv_func_getpwuid=no
-        export ac_cv_func_sigsetmask=no
-        export ac_cv_c_bigendian=no
-        export ac_cv_func_fallocate=no
-        export ac_cv_func_strverscmp=no
-        export ac_cv_func_getusershell=no
+        export ac_cv_func_getpwent=no ac_cv_func_getpwnam=no
+        export ac_cv_func_getpwuid=no ac_cv_func_sigsetmask=no
+        export ac_cv_c_bigendian=no ac_cv_func_fallocate=no
+        export ac_cv_func_strverscmp=no ac_cv_func_getusershell=no
         export ac_cv_func_log2=yes
         
         cd wine-src
@@ -111,7 +101,7 @@ jobs:
           --without-pulse --without-ncurses --without-gettext \
           --without-opengl --without-osmesa \
           --with-wine-tools=$PWD/../wine-tools-install \
-          --disable-tests 2>&1 | tail -30
+          --disable-tests
 
     - name: Build Wine
       run: |
@@ -120,10 +110,8 @@ jobs:
         export PATH="$TOOLCHAIN/bin:$PATH"
         export CC=$TOOLCHAIN/bin/x86_64-linux-android24-clang
         export CXX=$TOOLCHAIN/bin/x86_64-linux-android24-clang++
-        export AR=$TOOLCHAIN/bin/llvm-ar
-        
         cd wine-src
-        make -j$(nproc) 2>&1 | tail -30
+        make -j$(nproc)
 
     - name: Package Wine
       run: |
