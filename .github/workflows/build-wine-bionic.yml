@@ -61,7 +61,7 @@ jobs:
         mkdir -p ../wine-tools-build ../wine-tools-install
         cd ../wine-tools-build
         ../wine-src/configure --prefix=$PWD/../wine-tools-install \
-          --without-x --without-freetype
+          --without-x --without-freetype --disable-win16
         make -j$(nproc)
         make install
         echo "$PWD/../wine-tools-install/bin" >> $GITHUB_PATH
