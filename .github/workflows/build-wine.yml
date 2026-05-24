@@ -57,33 +57,53 @@ jobs:
           sudo update-alternatives --install /usr/bin/ld.lld ld.lld /usr/bin/lld-16 100
           clang --version
 
+      - name: Cache Android NDK
+        id: cache-ndk
+        uses: actions/cache@v4
+        with:
+          path: android-ndk-*
+          key: ndk-${{ github.event.inputs.ndk_version || 'r27c' }}-${{ runner.os }}
+
       - name: Download Android NDK
+        if: steps.cache-ndk.outputs.cache-hit != 'true'
         run: |
           NDK_VERSION="${{ github.event.inputs.ndk_version || 'r27c' }}"
           wget -q https://dl.google.com/android/repository/android-ndk-${NDK_VERSION}-linux.zip
           unzip -q android-ndk-${NDK_VERSION}-linux.zip
+
+      - name: Set NDK_HOME
+        run: |
+          NDK_VERSION="${{ github.event.inputs.ndk_version || 'r27c' }}"
           echo "NDK_HOME=$PWD/android-ndk-${NDK_VERSION}" >> $GITHUB_ENV
 
-      - name: Download Wine source
+      - name: Detect Wine version
+        id: wine-version
         run: |
           WINE_VER="${{ github.event.inputs.wine_version }}"
-          
-          # Auto-detect latest Wine stable version if not specified
           if [ -z "$WINE_VER" ]; then
             echo "Detecting latest Wine version..."
-            # Try WineHQ source listing
             WINE_VER=$(curl -sL https://dl.winehq.org/wine/source/ 2>/dev/null | grep -oP 'href="wine-\K[0-9]+\.[0-9]+(?=/")' | sort -V | tail -n1 || true)
-            # Fallback: try GitHub releases API
             if [ -z "$WINE_VER" ]; then
               WINE_VER=$(curl -sL https://api.github.com/repos/wine-mirror/wine/releases/latest 2>/dev/null | grep -oP '"tag_name":\s*"wine-\K[^"]+' || true)
             fi
-            # Hardcoded fallback
             if [ -z "$WINE_VER" ]; then
               WINE_VER="11.0"
             fi
-            echo "Detected Wine version: ${WINE_VER}"
           fi
-          
+          echo "WINE_VERSION=${WINE_VER}" >> $GITHUB_ENV
+          echo "version=${WINE_VER}" >> $GITHUB_OUTPUT
+
+      - name: Cache Wine source
+        id: cache-wine-src
+        uses: actions/cache@v4
+        with:
+          path: wine-src
+          key: wine-src-${{ steps.wine-version.outputs.version }}-${{ runner.os }}
+
+      - name: Download Wine source
+        if: steps.cache-wine-src.outputs.cache-hit != 'true'
+        run: |
+          WINE_VER="${{ steps.wine-version.outputs.version }}"
           echo "Building Wine ${WINE_VER}"
           
           # Try mirrors: GitHub → GitLab → WineHQ
@@ -106,7 +126,15 @@ jobs:
           
           echo "WINE_VERSION=${WINE_VER}" >> $GITHUB_ENV
 
+      - name: Cache native Wine tools
+        id: cache-wine-tools
+        uses: actions/cache@v4
+        with:
+          path: wine-tools-install
+          key: wine-tools-${{ steps.wine-version.outputs.version }}-${{ runner.os }}
+
       - name: Build Wine tools (native)
+        if: steps.cache-wine-tools.outputs.cache-hit != 'true'
         run: |
           cd wine-src
           mkdir -p ${{ github.workspace }}/wine-tools-build ${{ github.workspace }}/wine-tools-install
@@ -115,6 +143,9 @@ jobs:
             --enable-archs=i386,x86_64
           make -j$(nproc)
           make install
+
+      - name: Set tools PATH
+        run: |
           echo "${{ github.workspace }}/wine-tools-install/bin" >> $GITHUB_PATH
 
       - name: Configure Wine for Android/Bionic (cross-compile to x86_64 with i386 support)
@@ -211,26 +242,36 @@ jobs:
             cp -a fonts nls /tmp/wine-package/opt/wine/share/ 2>/dev/null || true
           fi
 
+      - name: Cache DXVK source
+        id: cache-dxvk
+        uses: actions/cache@v4
+        with:
+          path: dxvk-src
+          key: dxvk-src-${{ runner.os }}
+
       - name: Build and integrate DXVK (Vulkan DirectX support)
         run: |
           set -o pipefail
-          cd /tmp
           
-          # Clone DXVK for Vulkan DirectX translation
-          echo "Building DXVK for enhanced D3D performance..."
-          git clone --depth 1 https://github.com/doitsujin/dxvk.git dxvk-src 2>/dev/null || true
+          # Clone DXVK if not cached
+          if [ ! -d "${{ github.workspace }}/dxvk-src/.git" ]; then
+            echo "Cloning DXVK..."
+            git clone --depth 1 https://github.com/doitsujin/dxvk.git ${{ github.workspace }}/dxvk-src
+          else
+            echo "Using cached DXVK source"
+          fi
           
-          if [ -d dxvk-src ]; then
-            cd dxvk-src
+          if [ -d "${{ github.workspace }}/dxvk-src" ]; then
+            cd ${{ github.workspace }}/dxvk-src
             
             # Build DXVK with Meson directly
-            meson setup /tmp/dxvk-build \
+            meson setup ${{ github.workspace }}/dxvk-build \
               --buildtype release \
               -Ddxvk_compiler=clang \
               -Denable_tests=false 2>&1 | tail -10 || true
             
-            if [ -d /tmp/dxvk-build ]; then
-              cd /tmp/dxvk-build
+            if [ -d "${{ github.workspace }}/dxvk-build" ]; then
+              cd ${{ github.workspace }}/dxvk-build
               ninja 2>&1 | tail -10 || true
               
               # Copy DXVK DLLs to Wine
@@ -238,7 +279,7 @@ jobs:
               mkdir -p /tmp/wine-package/opt/wine/lib/wine/i386-windows
               
               # Find and copy built DLLs
-              find /tmp/dxvk-build -name "*.dll" -type f 2>/dev/null | while read dll; do
+              find ${{ github.workspace }}/dxvk-build -name "*.dll" -type f 2>/dev/null | while read dll; do
                 case "$dll" in
                   *x86_64*|*x64*) cp "$dll" /tmp/wine-package/opt/wine/lib/wine/x86_64-windows/ 2>/dev/null || true ;;
                   *x86*|*i386*)   cp "$dll" /tmp/wine-package/opt/wine/lib/wine/i386-windows/ 2>/dev/null || true ;;
