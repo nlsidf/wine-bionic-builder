@@ -20,14 +20,25 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - name: Install dependencies
+      - name: Install comprehensive dependencies
         run: |
           sudo apt-get update
           sudo apt-get install -y \
             autoconf automake libtool \
             pkg-config gettext flex bison xz-utils \
             gcc-multilib g++-multilib \
-            curl wget ca-certificates
+            curl wget ca-certificates \
+            libfreetype6-dev libglib2.0-dev \
+            libx11-dev libxrandr-dev libxrender-dev \
+            libxi-dev libxext-dev libxcomposite-dev \
+            libxfixes-dev libxdamage-dev libxinerama-dev \
+            libxkbcommon-dev libglu1-mesa-dev libosmesa6-dev \
+            libpng-dev libjpeg-dev libldap2-dev libgphoto2-dev \
+            libv4l-dev libbz2-dev libncurses5-dev libssl-dev \
+            libxml2-dev libxslt1-dev zlib1g-dev libpulse-dev \
+            libalsa-ocaml-dev libgstreamer1.0-dev libgstreamer-plugins-base1.0-dev \
+            libcups2-dev libsane-dev libusb-1.0-0-dev libdbus-1-dev \
+            libfontconfig1-dev libxslt1-dev libpcap-dev libvulkan-dev
 
       - name: Download Android NDK
         run: |
@@ -108,12 +119,23 @@ jobs:
             --host=x86_64-linux-android \
             --enable-win64 \
             --prefix=/opt/wine-${{ env.WINE_VERSION }} \
-            --without-x --without-freetype --without-xml \
-            --without-cups --without-gphoto --without-pcsclite \
-            --without-sane --without-udev --without-v4l2 \
-            --without-gstreamer --without-oss --without-alsa \
-            --without-pulse --without-ncurses --without-gettext \
-            --without-opengl --without-osmesa \
+            --with-freetype \
+            --with-xml \
+            --with-cups \
+            --with-gphoto \
+            --with-sane \
+            --with-v4l2 \
+            --with-gstreamer \
+            --with-alsa \
+            --with-pulse \
+            --with-ncurses \
+            --with-gettext \
+            --with-osmesa \
+            --with-opengl \
+            --with-xslt \
+            --with-usb \
+            --with-dbus \
+            --with-vulkan \
             --with-wine-tools=$PWD/../wine-tools-install \
             --disable-tests 2>&1 | tail -30
 

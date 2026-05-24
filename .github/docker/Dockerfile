@@ -41,7 +41,18 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     libssl-dev \
     libxml2-dev \
     libxslt1-dev \
-    zlib1g-dev && \
+    zlib1g-dev \
+    libpulse-dev \
+    libalsa-ocaml-dev \
+    libgstreamer1.0-dev \
+    libgstreamer-plugins-base1.0-dev \
+    libcups2-dev \
+    libsane-dev \
+    libusb-1.0-0-dev \
+    libdbus-1-dev \
+    libfontconfig1-dev \
+    libpcap-dev \
+    libvulkan-dev && \
     rm -rf /var/lib/apt/lists/*
 
 COPY scripts/build-wine.sh /build/build-wine.sh

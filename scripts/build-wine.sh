@@ -82,17 +82,28 @@ export CFLAGS="-O2 -fPIC -march=x86-64 -mtune=generic"
 export LDFLAGS="-lm"
 export CPPFLAGS=""
 
-# Configure Wine - disable unneeded features for Termux/Bionic
+# Configure Wine with full feature set
 ./configure \
   --host=x86_64-linux-android \
   --enable-win64 \
   --prefix=/opt/wine \
-  --without-x --without-freetype --without-xml \
-  --without-cups --without-gphoto --without-pcsclite \
-  --without-sane --without-udev --without-v4l2 \
-  --without-gstreamer --without-oss --without-alsa \
-  --without-pulse --without-ncurses --without-gettext \
-  --without-opengl --without-osmesa \
+  --with-freetype \
+  --with-xml \
+  --with-cups \
+  --with-gphoto \
+  --with-sane \
+  --with-v4l2 \
+  --with-gstreamer \
+  --with-alsa \
+  --with-pulse \
+  --with-ncurses \
+  --with-gettext \
+  --with-osmesa \
+  --with-opengl \
+  --with-xslt \
+  --with-usb \
+  --with-dbus \
+  --with-vulkan \
   --with-wine-tools=/tmp/wine-tools-install \
   --disable-tests > /dev/null
 

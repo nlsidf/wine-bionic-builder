@@ -56,40 +56,54 @@ tar -xJf wine-bionic-*.tar.xz
 file $PREFIX/opt/wine/bin/wine
 ```
 
-## 使用 Wine with Box64
+## 特性说明
 
-```bash
-# 直接运行 Windows 程序
-BOX64_PATH=$PREFIX/opt/wine/bin box64 wine program.exe
+此构建包含完整的 Wine 功能：
 
-# 或设置别名方便使用
-alias wine='BOX64_PATH=$PREFIX/opt/wine/bin box64 wine'
-wine program.exe
+### 显卡/3D 加速
+- **OpenGL**: 全面支持，可用于 3D 游戏和应用
+- **Vulkan**: 现代图形 API 支持
+- **Mesa**: 软件渲染支持 (OpenGL)
 
-# 进阶：设置环境变量
-export BOX64_PATH=$PREFIX/opt/wine/bin
-export WINE=$PREFIX/opt/wine/bin/wine
-box64 $WINE program.exe
-```
+### 多媒体
+- **音频**: ALSA + PulseAudio 双重支持
+- **视频**: GStreamer 支持，支持多种视频解码
+- **摄像头**: V4L2 视频捕获，GPhoto2 数码相机支持
+
+### 网络和外设
+- **打印**: CUPS 网络打印支持
+- **扫描**: SANE 扫描设备支持
+- **USB**: USB 设备访问支持
+- **DBus**: 系统服务集成
+
+### 文本和内容
+- **字体**: FreeType 字体渲染
+- **文档**: XML/XSLT 支持
+- **国际化**: gettext 多语言支持
+
+**注意**: 在 Termux/Box64 上，部分功能（如 X11 GUI）可能无法完全工作，但基础功能（游戏、图形应用）应该能够正常运行。
 
 ## 构建特性
 
 ### 启用的功能
 - Windows x86_64 支持 (`--enable-win64`)
+- FreeType / 字体支持 (`--with-freetype`)
+- XML 支持 (`--with-xml`)
+- OpenGL 3D 加速 (`--with-opengl --with-osmesa`)
+- Vulkan 支持 (`--with-vulkan`)
+- 音频支持 (`--with-alsa --with-pulse`)
+- 多媒体支持 (`--with-gstreamer`)
+- 网络打印 (`--with-cups`)
+- 扫描 (`--with-sane`)
+- USB 支持 (`--with-usb`)
+- DBus 支持 (`--with-dbus`)
+- V4L2 视频 (`--with-v4l2`)
+- XSLT 转换 (`--with-xslt`)
+- 摄像头支持 (`--with-gphoto`)
 - 基础 NTDLL 和运行时库
 
-### 禁用的功能（为了减少依赖）
-- X11 / GUI (`--without-x`)
-- FreeType / 字体 (`--without-freetype`)
-- OpenGL (`--without-opengl`)
-- ALSA/Pulse 音频 (`--without-alsa --without-pulse`)
-- 网络打印/扫描 (`--without-cups --without-sane`)
-
-### 编译配置
-- **Compiler**: Clang (from Android NDK)
-- **Target**: `x86_64-linux-android`
-- **API Level**: 24
-- **Optimization**: -O2 -march=x86-64
+### 禁用的项目
+- 生产环境测试 (`--disable-tests`)
 
 ## 项目结构
 
