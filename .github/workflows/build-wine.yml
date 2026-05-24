@@ -43,8 +43,7 @@ jobs:
             libalsa-ocaml-dev libgstreamer1.0-dev libgstreamer-plugins-base1.0-dev \
             libcups2-dev libsane-dev libusb-1.0-0-dev libdbus-1-dev \
             libfontconfig1-dev libpcap-dev libvulkan-dev \
-            vulkan-tools glslc llvm-dev libclang-dev meson ninja-build \
-            clang-16 lld-16
+            vulkan-tools glslc llvm-dev libclang-dev meson ninja-build
 
       - name: Download Android NDK
         run: |
