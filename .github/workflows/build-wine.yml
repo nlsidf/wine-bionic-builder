@@ -109,13 +109,13 @@ jobs:
       - name: Build Wine tools (native)
         run: |
           cd wine-src
-          mkdir -p ../wine-tools-build ../wine-tools-install
-          cd ../wine-tools-build
-          ../wine-src/configure --prefix=$PWD/../wine-tools-install \
-            --without-x --without-freetype --disable-tests
+          mkdir -p ${{ github.workspace }}/wine-tools-build ${{ github.workspace }}/wine-tools-install
+          cd ${{ github.workspace }}/wine-tools-build
+          ${{ github.workspace }}/wine-src/configure --prefix=${{ github.workspace }}/wine-tools-install \
+            --enable-archs=i386,x86_64 --with-wine-tools=build
           make -j$(nproc)
           make install
-          echo "$PWD/../wine-tools-install/bin" >> $GITHUB_PATH
+          echo "${{ github.workspace }}/wine-tools-install/bin" >> $GITHUB_PATH
 
       - name: Configure Wine for Android/Bionic (cross-compile to x86_64 with i386 support)
         run: |
@@ -145,7 +145,7 @@ jobs:
           export ac_cv_func_getusershell=no
           export ac_cv_func_log2=yes
           
-          cd wine-src
+          cd ${{ github.workspace }}/wine-src
           # Enable both architectures for maximum game compatibility
           ./configure \
             --host=x86_64-linux-android \
@@ -170,7 +170,7 @@ jobs:
             --with-dbus \
             --with-vulkan \
             --with-ldap \
-            --with-wine-tools=$PWD/../wine-tools-install \
+            --with-wine-tools=${{ github.workspace }}/wine-tools-install \
             --disable-tests 2>&1 | tail -30
 
       - name: Build Wine
@@ -180,7 +180,7 @@ jobs:
           export CC=x86_64-linux-android24-clang
           export CXX=x86_64-linux-android24-clang++
           
-          cd wine-src
+          cd ${{ github.workspace }}/wine-src
           make -j$(nproc) 2>&1 | tail -20
 
       - name: Install and package Wine for Termux
