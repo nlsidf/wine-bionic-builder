@@ -113,15 +113,24 @@ jobs:
         cd wine-src
         make -j$(nproc) 2>&1 | tail -20
 
-    - name: Install & Package
+    - name: Package Wine
       run: |
         cd wine-src
-        make install DESTDIR=/tmp/wine-pkg 2>&1 | tail -5
+        # 手动打包编译产物（交叉编译下make install可能没有）
+        mkdir -p /tmp/wine-pkg
+        for d in lib bin share include; do
+          [ -d "$d" ] && cp -r "$d" /tmp/wine-pkg/ 2>/dev/null || true
+        done
+        # 也检查子目录
+        for d in */; do
+          base=$(basename "$d")
+          if [ ! -d "/tmp/wine-pkg/$base" ]; then
+            cp -r "$d" /tmp/wine-pkg/ 2>/dev/null || true
+          fi
+        done 2>/dev/null
         
         cd /tmp
-        tar -czf "wine-bionic-${{ env.WINE_VERSION }}-x86_64.tar.gz" \
-          -C /tmp/wine-pkg .
-        
+        tar -czf "wine-bionic-${{ env.WINE_VERSION }}-x86_64.tar.gz" wine-pkg
         echo "ARTIFACT=wine-bionic-${{ env.WINE_VERSION }}-x86_64.tar.gz" >> $GITHUB_ENV
 
     - name: Upload artifact
