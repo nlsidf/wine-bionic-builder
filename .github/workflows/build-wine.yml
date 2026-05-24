@@ -1,0 +1,186 @@
+name: Build Wine for Bionic (x86_64) - Termux compatible
+
+on:
+  workflow_dispatch:
+    inputs:
+      wine_version:
+        description: 'Wine version (e.g., 11.0). Leave empty for latest stable'
+        required: false
+        default: ''
+      ndk_version:
+        description: 'Android NDK version (e.g., r27c)'
+        required: false
+        default: 'r27c'
+
+jobs:
+  build-wine:
+    runs-on: ubuntu-latest
+    permissions: 
+      contents: read
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y \
+            autoconf automake libtool \
+            pkg-config gettext flex bison xz-utils \
+            gcc-multilib g++-multilib \
+            curl wget ca-certificates
+
+      - name: Download Android NDK
+        run: |
+          NDK_VERSION="${{ github.event.inputs.ndk_version }}"
+          wget -q https://dl.google.com/android/repository/android-ndk-${NDK_VERSION}-linux.zip
+          unzip -q android-ndk-${NDK_VERSION}-linux.zip
+          echo "NDK_HOME=$PWD/android-ndk-${NDK_VERSION}" >> $GITHUB_ENV
+
+      - name: Download Wine source
+        run: |
+          WINE_VER="${{ github.event.inputs.wine_version }}"
+          
+          # Try multiple sources for Wine source
+          if [ -z "$WINE_VER" ]; then
+            echo "Detecting latest Wine version..."
+            WINE_VER=$(curl -s https://dl.winehq.org/wine/source/ | grep -o 'wine-[0-9]\+\(\.[0-9]\+\)*' | sort -V | tail -n1 | sed 's/wine-//')
+          fi
+          
+          echo "Building Wine ${WINE_VER}"
+          
+          wget -q "https://dl.winehq.org/wine/source/${WINE_VER}/wine-${WINE_VER}.tar.xz" \
+            -O "wine-${WINE_VER}.tar.xz" 2>/dev/null || \
+          wget -q "https://github.com/wine-mirror/wine/archive/refs/tags/wine-${WINE_VER}.tar.gz" \
+            -O "wine-${WINE_VER}.tar.gz" 2>/dev/null || \
+          (echo "Failed to download Wine ${WINE_VER}" && exit 1)
+          
+          if [ -f "wine-${WINE_VER}.tar.xz" ]; then
+            tar -xf "wine-${WINE_VER}.tar.xz"
+          elif [ -f "wine-${WINE_VER}.tar.gz" ]; then
+            tar -xf "wine-${WINE_VER}.tar.gz"
+          fi
+          
+          # Find extracted directory with flexible naming
+          WINE_DIR=$(ls -d wine-*/ 2>/dev/null | head -1 || ls -d wine-wine-*/ 2>/dev/null | head -1)
+          mv "$WINE_DIR" wine-src
+          
+          echo "WINE_VERSION=${WINE_VER}" >> $GITHUB_ENV
+
+      - name: Build Wine tools (native 64-bit)
+        run: |
+          cd wine-src
+          mkdir -p ../wine-tools-build ../wine-tools-install
+          cd ../wine-tools-build
+          ../wine-src/configure --prefix=$PWD/../wine-tools-install --enable-win64 2>&1 | tail -10
+          make -j$(nproc) 2>&1 | tail -10
+          make install 2>&1 | tail -10
+          echo "$PWD/../wine-tools-install/bin" >> $GITHUB_PATH
+
+      - name: Configure Wine for Android/Bionic (cross-compile to x86_64)
+        run: |
+          export PATH="$NDK_HOME/toolchains/llvm/prebuilt/linux-x86_64/bin:$PATH"
+          export CC=x86_64-linux-android24-clang
+          export CXX=x86_64-linux-android24-clang++
+          export AR=llvm-ar
+          export RANLIB=llvm-ranlib
+          export LD=ld.lld
+          
+          # Bionic compatibility flags for Termux x86_64
+          export CFLAGS="-O2 -fPIC -march=x86-64 -mtune=generic"
+          export LDFLAGS="-lm"
+          export CPPFLAGS=""
+          
+          # Tell Wine configure these glibc functions don't exist in bionic
+          export ac_cv_func_getpwent=no
+          export ac_cv_func_getpwnam=no
+          export ac_cv_func_getpwuid=no
+          export ac_cv_func_getgrnam=no
+          export ac_cv_func_getgrgid=no
+          export ac_cv_func_sigsetmask=no
+          export ac_cv_c_bigendian=no
+          export ac_cv_func_fallocate=no
+          export ac_cv_func_strverscmp=no
+          export ac_cv_func_getusershell=no
+          export ac_cv_func_log2=yes
+          
+          cd wine-src
+          ./configure \
+            --host=x86_64-linux-android \
+            --enable-win64 \
+            --prefix=/opt/wine-${{ env.WINE_VERSION }} \
+            --without-x --without-freetype --without-xml \
+            --without-cups --without-gphoto --without-pcsclite \
+            --without-sane --without-udev --without-v4l2 \
+            --without-gstreamer --without-oss --without-alsa \
+            --without-pulse --without-ncurses --without-gettext \
+            --without-opengl --without-osmesa \
+            --with-wine-tools=$PWD/../wine-tools-install \
+            --disable-tests 2>&1 | tail -30
+
+      - name: Build Wine
+        run: |
+          export PATH="$NDK_HOME/toolchains/llvm/prebuilt/linux-x86_64/bin:$PATH"
+          export CC=x86_64-linux-android24-clang
+          export CXX=x86_64-linux-android24-clang++
+          
+          cd wine-src
+          make -j$(nproc) 2>&1 | tail -20
+
+      - name: Package Wine for Termux
+        run: |
+          cd wine-src
+          
+          # Staged installation
+          mkdir -p /tmp/wine-stage-install
+          make install DESTDIR=/tmp/wine-stage-install 2>&1 | tail -5
+          
+          # Prepare final package structure for Termux (/opt or $PREFIX)
+          mkdir -p /tmp/wine-package/opt
+          cp -av /tmp/wine-stage-install/opt/wine-${{ env.WINE_VERSION }} /tmp/wine-package/opt/wine || true
+          
+          cd /tmp/wine-package
+          tar -cJf wine-bionic-${{ env.WINE_VERSION }}-x86_64-termux.tar.xz .
+          
+          # Calculate checksum
+          sha256sum wine-bionic-${{ env.WINE_VERSION }}-x86_64-termux.tar.xz > wine-bionic-${{ env.WINE_VERSION }}-x86_64-termux.tar.xz.sha256
+          
+          mv wine-bionic-* ${{ github.workspace }}/
+          ls -lh ${{ github.workspace }}/wine-bionic-*
+
+      - name: Create release notes
+        run: |
+          cat > ${{ github.workspace }}/BUILD_INFO.txt << 'EOF'
+          Wine Bionic Build for Termux + Box64
+          ======================================
+          
+          Version: ${{ env.WINE_VERSION }}
+          Architecture: x86_64
+          Target: Termux on Android (via Box64 translator)
+          Build Date: $(date)
+          
+          Installation Instructions:
+          1. Extract to $PREFIX in Termux:
+             cd $PREFIX
+             tar -xJf wine-bionic-*.tar.xz
+          
+          2. Set up symlink:
+             ln -sf $PREFIX/opt/wine $PREFIX/opt/wine-latest
+          
+          3. Use with Box64:
+             BOX64_PATH=$PREFIX/opt/wine/bin box64 wine program.exe
+          
+          Build Flags:
+          - Disabled: X11, FreeType, XML, Cups, Gphoto, Alsa, Pulse, OpenGL
+          - Target: Android/Bionic libc (x86_64)
+          - Compiler: Clang from Android NDK
+          EOF
+          cat ${{ github.workspace }}/BUILD_INFO.txt
+
+      - name: Upload artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: wine-bionic-${{ env.WINE_VERSION }}-x86_64
+          path: |
+            wine-bionic-*.tar.xz*
+            BUILD_INFO.txt
+          retention-days: 30
