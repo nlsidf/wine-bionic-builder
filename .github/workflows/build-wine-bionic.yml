@@ -1,0 +1,138 @@
+name: Build Wine for Android/bionic (x86_64)
+# 为 Termux/Android 交叉编译 x86_64 版 Wine（bionic 链接）
+# 编译产物通过 box64 在 ARM64 设备上运行
+
+on:
+  workflow_dispatch:
+    inputs:
+      wine_version:
+        description: 'Wine version (e.g. 10.0, 11.0)'
+        required: true
+        default: '11.0'
+
+jobs:
+  build-wine:
+    runs-on: ubuntu-latest
+    
+    steps:
+    - name: Checkout
+      uses: actions/checkout@v4
+
+    - name: Install dependencies
+      run: |
+        sudo apt-get update
+        sudo apt-get install -y \
+          autoconf automake libtool \
+          pkg-config gettext \
+          flex bison xz-utils \
+          gcc-multilib g++-multilib \
+          libx11-dev libxext-dev \
+          libfreetype-dev
+
+    - name: Download Android NDK
+      run: |
+        wget -q https://dl.google.com/android/repository/android-ndk-r27c-linux.zip
+        unzip -q android-ndk-r27c-linux.zip
+        echo "NDK_HOME=$PWD/android-ndk-r27c" >> $GITHUB_ENV
+
+    - name: Download Wine source
+      run: |
+        WINE_VER="${{ github.event.inputs.wine_version }}"
+        wget -q "https://github.com/wine-mirror/wine/releases/download/wine-${WINE_VER}/wine-${WINE_VER}.tar.xz"
+        tar -xf "wine-${WINE_VER}.tar.xz"
+        mv "wine-${WINE_VER}" wine-src
+        echo "WINE_VERSION=${WINE_VER}" >> $GITHUB_ENV
+
+    - name: Set up toolchain
+      run: |
+        NDK=$NDK_HOME
+        export PATH="$NDK/toolchains/llvm/prebuilt/linux-x86_64/bin:$PATH"
+        
+        # Wine configure 需要的 bionic 兼容性选项
+        export CC=x86_64-linux-android24-clang
+        export CXX=x86_64-linux-android24-clang++
+        export AR=llvm-ar
+        export RANLIB=llvm-ranlib
+        export LD=ld.lld
+        
+        # Bionic doesn't have these glibc functions
+        export ac_cv_func_getpwent=no
+        export ac_cv_func_getpwnam=no
+        export ac_cv_func_getpwuid=no
+        export ac_cv_func_sigsetmask=no
+        export ac_cv_c_bigendian=no
+        export ac_cv_func_fallocate=no
+        export ac_cv_func_strverscmp=no
+        
+        echo "CC=$CC" >> $GITHUB_ENV
+        echo "CXX=$CXX" >> $GITHUB_ENV
+        echo "AR=$AR" >> $GITHUB_ENV
+        echo "RANLIB=$RANLIB" >> $GITHUB_ENV
+        echo "LD=$LD" >> $GITHUB_ENV
+        echo "PATH=$PATH" >> $GITHUB_ENV
+
+    - name: Configure Wine
+      run: |
+        cd wine-src
+        
+        # Bionic 需要这些宏
+        export CFLAGS="-O2 -fPIC -D__BIONIC__ -D__ANDROID_API__=24 -march=x86-64"
+        export LDFLAGS="-lm -landroid-spawn"
+        export CPPFLAGS="-D__BIONIC__ -D__ANDROID_API__=24"
+        
+        # 64-bit Wine with WoW64 support
+        ./configure \
+          --host=x86_64-linux-android \
+          --enable-archs=i386,x86_64 \
+          --prefix=/tmp/wine-install \
+          --without-x \
+          --without-freetype \
+          --without-xml \
+          --without-cups \
+          --without-gphoto \
+          --without-pcsclite \
+          --without-sane \
+          --without-udev \
+          --without-v4l2 \
+          --without-gstreamer \
+          --without-oss \
+          --without-alsa \
+          --without-pulse \
+          --without-ncurses \
+          --without-gettext \
+          --disable-tests 2>&1 | tail -30
+
+    - name: Build Wine
+      run: |
+        cd wine-src
+        # 先编译 build 工具（在宿主机上运行）
+        mkdir -p ../wine-tools
+        cd ../wine-tools
+        ../wine-src/configure --prefix=/tmp/wine-tools-install 2>&1 | tail -5
+        make -j$(nproc) 2>&1 | tail -5
+        make install 2>&1 | tail -5
+        export PATH="/tmp/wine-tools-install/bin:$PATH"
+        
+        # 再交叉编译 Wine
+        cd ../wine-src
+        # 重新配置，指定 build tools
+        make clean 2>/dev/null
+        make -j$(nproc) 2>&1 | tail -20
+
+    - name: Package Wine
+      run: |
+        cd wine-src
+        make install DESTDIR=/tmp/wine-package 2>&1 | tail -5
+        
+        # 打包
+        cd /tmp
+        tar -czf "wine-bionic-${{ env.WINE_VERSION }}-x86_64.tar.gz" \
+          -C /tmp/wine-package .
+        
+        echo "ARTIFACT=wine-bionic-${{ env.WINE_VERSION }}-x86_64.tar.gz" >> $GITHUB_ENV
+
+    - name: Upload artifact
+      uses: actions/upload-artifact@v4
+      with:
+        name: wine-bionic-${{ env.WINE_VERSION }}
+        path: /tmp/${{ env.ARTIFACT }}
